@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+
+  vitra:
+    image: vitra:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - nfs-vault:/vault
+    environment:
+      - VAULT_PATH=/vault
+
+  vitra-mcp:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - nfs-vault:/vault
+    environment:
+      - VAULT_PATH=/vault
+      - PORT=3000
+      - CHROMADB_URL=http://chromadb:8000
+      - EMBEDDING_API_URL=${EMBEDDING_API_URL}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+    depends_on:
+      - chromadb
+
+volumes:
+  nfs-vault:
+    driver: local
+  chroma-data:
+    driver: local

@@ -1,0 +1,42 @@
+# Environment variables
+.env
+
+# Build artifacts
+vitra-mcp
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vault data (for local testing)
+vault/
+
+# ChromaDB data (for local testing)
+chromadb/
+chroma-data/
+
+# Python virtual environment
+.venv/
