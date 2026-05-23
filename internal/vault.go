@@ -29,6 +29,22 @@ func NewVault(path string, store vector.VectorStore) *Vault {
 	return &Vault{Path: path, VectorStore: store}
 }
 
+func (v *Vault) resolvePath(relPath string) (string, error) {
+	fullPath := filepath.Join(v.Path, relPath)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", err
+	}
+	absVault, err := filepath.Abs(v.Path)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(absPath, absVault+string(filepath.Separator)) && absPath != absVault {
+		return "", fmt.Errorf("path traversal not allowed: %s", relPath)
+	}
+	return fullPath, nil
+}
+
 type Note struct {
 	Path        string                 `json:"path"`
 	Title       string                 `json:"title"`
@@ -118,19 +134,56 @@ func (v *Vault) CreateNote(path string, content string) error {
 }
 
 func (v *Vault) DeleteNote(path string) error {
-	fullPath := filepath.Join(v.Path, path+".md")
-	if err := os.RemoveAll(fullPath); err != nil {
+	// First try as a note (path.md)
+	notePath := path + ".md"
+	noteFull, err := v.resolvePath(notePath)
+	if err != nil {
 		return err
 	}
-
-	// Remove from vector store
-	if v.VectorStore != nil {
-		if err := v.VectorStore.DeleteNote(context.Background(), path); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to delete note %s from index: %v\n", path, err)
+	info, statErr := os.Stat(noteFull)
+	if statErr == nil && !info.IsDir() {
+		if err := os.Remove(noteFull); err != nil {
+			return err
 		}
+		if v.VectorStore != nil {
+			if err := v.VectorStore.DeleteNote(context.Background(), path); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to delete note %s from index: %v\n", path, err)
+			}
+		}
+		return nil
 	}
 
-	return nil
+	// Then try as a folder
+	folderFull, err := v.resolvePath(path)
+	if err != nil {
+		return err
+	}
+	info, statErr = os.Stat(folderFull)
+	if statErr != nil {
+		return fmt.Errorf("not found: %s", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("not a directory: %s", path)
+	}
+
+	// Remove notes from vector store before deleting folder
+	if v.VectorStore != nil {
+		filepath.WalkDir(folderFull, func(p string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
+				rel, _ := filepath.Rel(v.Path, p)
+				rel = strings.TrimSuffix(filepath.ToSlash(rel), ".md")
+				if err := v.VectorStore.DeleteNote(context.Background(), rel); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to delete note %s from index: %v\n", rel, err)
+				}
+			}
+			return nil
+		})
+	}
+
+	return os.RemoveAll(folderFull)
 }
 
 func (v *Vault) ListNotes(subpath string) ([]FileNode, error) {

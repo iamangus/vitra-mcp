@@ -256,6 +256,11 @@ func (c *ChromaStore) DeleteNote(ctx context.Context, path string) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete chunks: %d - %s", resp.StatusCode, string(respBody))
+	}
+
 	return nil
 }
 
